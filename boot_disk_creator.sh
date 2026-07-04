@@ -73,12 +73,15 @@ sudo mount $devaddress /media/disk
 echo [3/11] "Downloading and unpacking userspace to /media/disk"
 curl -Lo arch_userspace.tar.gz http://os.archlinuxarm.org/os/ArchLinuxARM-armv7-latest.tar.gz
 echo "       Extracting (this takes a few minutes)..."
-GNU_TAR=$(command -v gnutar 2>/dev/null || command -v gtar 2>/dev/null || echo "")
+# Prefer gnutar if available (via PATH); gnutar supports --checkpoint for progress
+# sudo resets PATH, so preserve it so gnutar is found when running under the Nix app
+GNU_TAR=$(PATH="$PATH:/run/wrappers/bin" command -v gnutar 2>/dev/null || command -v gtar 2>/dev/null || echo "")
 if [ -n "$GNU_TAR" ]; then
-  sudo "$GNU_TAR" -xpf arch_userspace.tar.gz -C /media/disk/ --checkpoint=5000 --checkpoint-action=echo="       ... checkpoint %u files"
+  sudo env "PATH=$PATH" "$GNU_TAR" -xpf arch_userspace.tar.gz -C /media/disk/ --checkpoint=5000 --checkpoint-action=echo="       ... checkpoint %u files"
 else
   # bsdtar fallback — suppress its chatty LIBARCHIVE warnings
   sudo tar -xpf arch_userspace.tar.gz -C /media/disk/ 2>/dev/null
+  echo "       (extraction complete)"
 fi
 
 # ---------------------------------------------------------------------------
