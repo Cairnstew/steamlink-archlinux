@@ -1,4 +1,7 @@
 #!/bin/bash
+# Determine script directory regardless of how we're invoked
+SCRIPT_DIR="$(dirname "$(readlink -f "$0")")"
+
 echo "ArchLinux BootMedium Creator for Steamlink"
 echo "Based on https://www.reddit.com/r/Steam_Link/comments/fgew5x/running_archlinux_on_steam_link_revisited/"
 echo ""
@@ -18,21 +21,21 @@ echo [3/11] "Downloading and unpacking userspace to /media/disk"
 curl -Lo arch_userspace.tar.gz http://os.archlinuxarm.org/os/ArchLinuxARM-armv7-latest.tar.gz
 sudo tar -xvpf  arch_userspace.tar.gz -C /media/disk/
 echo [4/11] "Copying kexec_load.ko"
-sudo cp kexec_load.ko /media/disk/boot/
+sudo cp "$SCRIPT_DIR/kexec_load.ko" /media/disk/boot/
 echo [5/11] "Copying zImage"
-sudo cp zImage_6_1_66 /media/disk/boot/zImage
+sudo cp "$SCRIPT_DIR/zImage_6_1_66" /media/disk/boot/zImage
 echo [6/11] "Copying initramfs"
-sudo cp initramfs-linux-steam_6_1_66.img /media/disk/boot/initramfs-linux-steam.img
+sudo cp "$SCRIPT_DIR/initramfs-linux-steam_6_1_66.img" /media/disk/boot/initramfs-linux-steam.img
 echo [7/11] "Copying berlin2cd-valve-steamlink.dtb"
-sudo cp berlin2cd-valve-steamlink.dtb /media/disk/boot/
+sudo cp "$SCRIPT_DIR/berlin2cd-valve-steamlink.dtb" /media/disk/boot/
 echo [8/11] "Copying  kexec and 755 on kexec"
-sudo cp kexec /media/disk/usr/bin
+sudo cp "$SCRIPT_DIR/kexec" /media/disk/usr/bin
 sudo chmod 755 /media/disk/usr/bin/kexec
 echo [9/11] "Copying 6.1.66-mrvl to modules"
-sudo cp -r 6.1.66-mrvl/ /media/disk/lib/modules/
+sudo cp -r "$SCRIPT_DIR/6.1.66-mrvl/" /media/disk/lib/modules/
 echo [10/11] "Copying run.sh and 755 on it"
 sudo mkdir -p /media/disk/steamlink/factory_test/
-sudo cp run.sh /media/disk/steamlink/factory_test/
+sudo cp "$SCRIPT_DIR/run.sh" /media/disk/steamlink/factory_test/
 sudo chmod 755 /media/disk/steamlink/factory_test/run.sh
 echo [11/11] "Finally creating ssh folder"
 sudo mkdir -p /media/disk/steamlink/config/system/
