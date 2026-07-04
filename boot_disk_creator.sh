@@ -72,8 +72,9 @@ sudo mkdir -p /media/disk/
 sudo mount $devaddress /media/disk
 echo [3/11] "Downloading and unpacking userspace to /media/disk"
 curl -Lo arch_userspace.tar.gz http://os.archlinuxarm.org/os/ArchLinuxARM-armv7-latest.tar.gz
-echo "       Extracting (~60k files, this takes a few minutes)..."
-sudo tar -xpf  arch_userspace.tar.gz -C /media/disk/ --checkpoint=10000 --checkpoint-action=echo="       ... checkpoint %u files"
+echo "       Extracting (this takes a few minutes)..."
+GNU_TAR=$(command -v gnutar 2>/dev/null || command -v gtar 2>/dev/null || echo "tar")
+sudo "$GNU_TAR" -xpf arch_userspace.tar.gz -C /media/disk/ 2>/dev/null
 
 # ---------------------------------------------------------------------------
 # Tailscale injection (optional)
