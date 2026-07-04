@@ -4,6 +4,7 @@ SCRIPT_DIR="$(dirname "$(readlink -f "$0")")"
 
 # Parse arguments
 TAILSCALE_KEY=""
+DEVICE=""
 while [[ $# -gt 0 ]]; do
   case $1 in
     -k|--tailscale-key)
@@ -14,12 +15,21 @@ while [[ $# -gt 0 ]]; do
       TAILSCALE_KEY="${1#*=}"
       shift
       ;;
+    -d|--device)
+      DEVICE="$2"
+      shift 2
+      ;;
+    --device=*)
+      DEVICE="${1#*=}"
+      shift
+      ;;
     -h|--help)
-      echo "Usage: $0 [--tailscale-key KEY]"
+      echo "Usage: $0 [OPTIONS]"
       echo ""
       echo "Creates a bootable Arch Linux USB for Valve Steam Link."
       echo ""
       echo "Options:"
+      echo "  -d, --device DEV        USB partition (e.g. /dev/sdb1). If omitted, prompts interactively."
       echo "  -k, --tailscale-key KEY  Tailscale auth key for automatic mesh VPN setup"
       echo "                           Device will join your tailnet on first boot"
       echo "  -h, --help               Show this help message"
@@ -43,12 +53,17 @@ done
 echo "ArchLinux BootMedium Creator for Steamlink"
 echo "Based on https://www.reddit.com/r/Steam_Link/comments/fgew5x/running_archlinux_on_steam_link_revisited/"
 echo ""
-sudo blkid
-echo ""
-echo "Please enter /dev/ address of your USB disk from above."
-echo "For example /dev/sdb1"
-echo "CAUTION! That device will be formatted and you will lose any data in there!"
-read devaddress
+
+if [ -z "$DEVICE" ]; then
+  sudo blkid
+  echo ""
+  echo "Please enter /dev/ address of your USB disk from above."
+  echo "For example /dev/sdb1"
+  echo "CAUTION! That device will be formatted and you will lose any data in there!"
+  read devaddress
+else
+  devaddress="$DEVICE"
+fi
 sudo umount $devaddress
 echo [1/11] formatting $devaddress
 sudo mkfs.ext3 $devaddress
