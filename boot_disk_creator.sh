@@ -2,6 +2,44 @@
 # Determine script directory regardless of how we're invoked
 SCRIPT_DIR="$(dirname "$(readlink -f "$0")")"
 
+# Parse arguments
+TAILSCALE_KEY=""
+while [[ $# -gt 0 ]]; do
+  case $1 in
+    -k|--tailscale-key)
+      TAILSCALE_KEY="$2"
+      shift 2
+      ;;
+    --tailscale-key=*)
+      TAILSCALE_KEY="${1#*=}"
+      shift
+      ;;
+    -h|--help)
+      echo "Usage: $0 [--tailscale-key KEY]"
+      echo ""
+      echo "Creates a bootable Arch Linux USB for Valve Steam Link."
+      echo ""
+      echo "Options:"
+      echo "  -k, --tailscale-key KEY  Tailscale auth key for automatic mesh VPN setup"
+      echo "                           Device will join your tailnet on first boot"
+      echo "  -h, --help               Show this help message"
+      exit 0
+      ;;
+    --)
+      shift
+      break
+      ;;
+    -*)
+      echo "Unknown option: $1"
+      echo "Usage: $0 [--tailscale-key KEY]"
+      exit 1
+      ;;
+    *)
+      break
+      ;;
+  esac
+done
+
 echo "ArchLinux BootMedium Creator for Steamlink"
 echo "Based on https://www.reddit.com/r/Steam_Link/comments/fgew5x/running_archlinux_on_steam_link_revisited/"
 echo ""
@@ -20,6 +58,78 @@ sudo mount $devaddress /media/disk
 echo [3/11] "Downloading and unpacking userspace to /media/disk"
 curl -Lo arch_userspace.tar.gz http://os.archlinuxarm.org/os/ArchLinuxARM-armv7-latest.tar.gz
 sudo tar -xvpf  arch_userspace.tar.gz -C /media/disk/
+
+# ---------------------------------------------------------------------------
+# Tailscale injection (optional)
+# ---------------------------------------------------------------------------
+if [ -n "$TAILSCALE_KEY" ]; then
+  echo [3.5/11] "Installing Tailscale for ARM (armv7)"
+  TAILSCALE_URL="https://pkgs.tailscale.com/stable/tailscale_latest_arm.tgz"
+  if curl -fSLo /tmp/tailscale.tgz "$TAILSCALE_URL"; then
+    tar -xzf /tmp/tailscale.tgz -C /tmp/
+    TAILSCALE_DIR=$(ls -d /tmp/tailscale_*/ 2>/dev/null || echo "")
+    if [ -n "$TAILSCALE_DIR" ] && [ -f "${TAILSCALE_DIR}tailscale" ]; then
+      sudo cp "${TAILSCALE_DIR}tailscale" /media/disk/usr/bin/
+      sudo cp "${TAILSCALE_DIR}tailscaled" /media/disk/usr/bin/
+      sudo chmod 755 /media/disk/usr/bin/tailscale /media/disk/usr/bin/tailscaled
+
+      # Auth key file (read by autoconnect service)
+      sudo mkdir -p /media/disk/var/lib/tailscale
+      echo "$TAILSCALE_KEY" | sudo tee /media/disk/var/lib/tailscale/auth.key > /dev/null
+      sudo chmod 600 /media/disk/var/lib/tailscale/auth.key
+
+      # Tailscale daemon service
+      sudo mkdir -p /media/disk/usr/lib/systemd/system
+      sudo tee /media/disk/usr/lib/systemd/system/tailscaled.service > /dev/null << 'SERVICEOF'
+[Unit]
+Description=Tailscale node agent
+Documentation=https://tailscale.com/kb/
+After=network.target
+Wants=network.target
+
+[Service]
+Type=simple
+ExecStart=/usr/bin/tailscaled
+Restart=on-failure
+RestartSec=5
+
+[Install]
+WantedBy=multi-user.target
+SERVICEOF
+
+      # Oneshot autoconnect service — authenticates on boot using pre-loaded key
+      sudo tee /media/disk/usr/lib/systemd/system/tailscale-autoconnect.service > /dev/null << 'AUTOCONNECT'
+[Unit]
+Description=Tailscale auto-authenticate
+After=tailscaled.service
+Requires=tailscaled.service
+
+[Service]
+Type=oneshot
+ExecStart=/bin/sh -c '/usr/bin/tailscale up --auth-key=$(cat /var/lib/tailscale/auth.key) --ssh --accept-dns=true'
+RemainAfterExit=yes
+
+[Install]
+WantedBy=multi-user.target
+AUTOCONNECT
+
+      # Enable both services
+      sudo mkdir -p /media/disk/etc/systemd/system/multi-user.target.wants/
+      sudo ln -sf /usr/lib/systemd/system/tailscaled.service /media/disk/etc/systemd/system/multi-user.target.wants/tailscaled.service
+      sudo ln -sf /usr/lib/systemd/system/tailscale-autoconnect.service /media/disk/etc/systemd/system/multi-user.target.wants/tailscale-autoconnect.service
+
+      rm -f /tmp/tailscale.tgz
+      rm -rf /tmp/tailscale_*/
+    else
+      echo "Warning: Tailscale extracted files not found, skipping." >&2
+    fi
+  else
+    echo "Warning: Failed to download Tailscale binary, skipping." >&2
+  fi
+else
+  echo "[3.5/11] Skipping Tailscale (no --tailscale-key provided)"
+fi
+
 echo [4/11] "Copying kexec_load.ko"
 sudo cp "$SCRIPT_DIR/kexec_load.ko" /media/disk/boot/
 echo [5/11] "Copying zImage"
@@ -45,4 +155,3 @@ sudo umount -l $devaddress
 echo "Cleaning up ... "
 sudo rm -rf /media/disk
 echo  "Completed. Please remove the USB disk and insert it into steamlink."
-
